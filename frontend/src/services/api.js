@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-export const  api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
-});
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const uploadPothole = async (formData) => {
     try {
@@ -11,7 +9,7 @@ export const uploadPothole = async (formData) => {
         });
         return response.data;
     } catch (error) {
-        console.error("Error uploading image:", error);
+        console.error("Error uploading data:", error);
         throw error;
     }
 };

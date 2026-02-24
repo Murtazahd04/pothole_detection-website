@@ -86,5 +86,14 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# app.py mein niche ye route add karein
+
+@app.route('/reports', methods=['GET'])
+def get_reports():
+    reports = list(reports_collection.find().sort("created_at", -1)) # Latest reports upar
+    for report in reports:
+        report['_id'] = str(report['_id'])
+    return jsonify(reports)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
