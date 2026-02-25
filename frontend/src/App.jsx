@@ -1,29 +1,48 @@
-import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './components/Login';
+import Signup from './components/Signup';
 import PotholeForm from './components/PotholeForm';
 import Dashboard from './components/Dashboard';
 import 'leaflet/dist/leaflet.css';
+const PrivateRoute = ({ children, role }) => {
+    const token = localStorage.getItem('token');
+    const userRole = localStorage.getItem('role');
+    
+    if (!token) return <Navigate to="/login" />;
+    
+    // Agar humne 'admin' role manga hai, toh check karo ki userRole mein 'admin' keyword hai ya nahi
+    if (role === 'admin' && !userRole.includes('admin')) {
+        return <Navigate to="/report" />;
+    }
+    
+    return children;
+};
+
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-blue-600 p-4 text-white shadow-md mb-6">
-        <h1 className="text-xl font-bold text-center">Pothole Management System</h1>
-      </nav>
-
-      <div className="container mx-auto px-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left Side: Citizen Upload Form */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Citizen Portal</h2>
-          <PotholeForm />
-        </div>
-
-        {/* Right Side: Admin Dashboard */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Admin View</h2>
-          <Dashboard />
-        </div>
-      </div>
-    </div>
-  );
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                
+                {/* User Page */}
+                <Route path="/report" element={
+                    <PrivateRoute role="user">
+                        <PotholeForm />
+                    </PrivateRoute>
+                } />
+                
+                {/* Admin Page */}
+                <Route path="/admin" element={
+                    <PrivateRoute role="admin">
+                        <Dashboard />
+                    </PrivateRoute>
+                } />
+                
+                <Route path="/" element={<Navigate to="/login" />} />
+            </Routes>
+        </BrowserRouter>
+    );
 }
 
 export default App;
