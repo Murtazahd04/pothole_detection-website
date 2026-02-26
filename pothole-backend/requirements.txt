@@ -1,7 +1,8 @@
 flask
 flask-cors
-ultralytics
 pymongo
+ultralytics
 python-dotenv
-opencv-python
-pillow
+geopy
+PyJWT
+werkzeug

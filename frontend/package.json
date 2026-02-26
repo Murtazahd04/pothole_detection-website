@@ -13,10 +13,13 @@
     "@tailwindcss/vite": "^4.2.1",
     "axios": "^1.13.5",
     "leaflet": "^1.9.4",
+    "leaflet-geosearch": "^4.2.2",
+    "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
+    "react-leaflet-markercluster": "^5.0.0-rc.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^3.7.0",
     "tailwindcss": "^4.2.1"
