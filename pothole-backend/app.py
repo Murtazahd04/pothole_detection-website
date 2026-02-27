@@ -23,15 +23,15 @@ CORS(app, resources={r"/*": {"origins": "*"}},
 
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "mumbai_university_it_2026")
 
-# --- CONFIGURATION ---
-UPLOAD_FOLDER = 'uploads'
-MODEL_PATH = 'model/best.pt'
+# --- CONFIGURATION (Fixed for Absolute Pathing) ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 geolocator = Nominatim(user_agent="pothole_fix_system")
 
 # --- DATABASE & MODEL INITIALIZATION ---
 try:
-    model = YOLO(MODEL_PATH)
+    model = YOLO(os.path.join(BASE_DIR, 'model', 'best.pt'))
     client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
     db = client['pothole_db']
     reports_collection = db['reports']
@@ -84,11 +84,9 @@ def report_pothole():
     file.save(img_path)
 
     try:
-        # Run YOLOv8 Inference
         results = model.predict(source=img_path, conf=0.4)
         pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
 
-        # Automatic Municipality Assignment based on address
         assigned_municipality = "OTHER"
         addr_lower = address.lower()
         if "thane" in addr_lower: assigned_municipality = "TMC"
@@ -109,16 +107,12 @@ def report_pothole():
         }
 
         inserted = reports_collection.insert_one(report_data)
-        return jsonify({
-            "message": "Report created", 
-            "id": str(inserted.inserted_id), 
-            "count": pothole_count
-        }), 201
+        return jsonify({"message": "Report created", "id": str(inserted.inserted_id), "count": pothole_count}), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 2. Real-time Prediction Route
+# 2. Prediction Route
 @app.route('/predict', methods=['POST'])
 def predict_only():
     if 'image' not in request.files:
@@ -137,7 +131,7 @@ def predict_only():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 3. Fetch Reports (Role-Based)
+# 3. Fetch Reports
 @app.route('/reports', methods=['GET'])
 def get_reports():
     admin_role = request.args.get('role')
@@ -157,18 +151,7 @@ def get_reports():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 4. Delete Report
-@app.route('/reports/<report_id>', methods=['DELETE'])
-def delete_report(report_id):
-    try:
-        result = reports_collection.delete_one({"_id": ObjectId(report_id)})
-        if result.deleted_count > 0:
-            return jsonify({"message": "Report deleted successfully"}), 200
-        return jsonify({"error": "Report not found"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# 5. Auth Routes (Signup/Login)
+# 4. Auth Routes
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -193,20 +176,11 @@ def login():
     if not user or not check_password_hash(user['password'], data['password']):
         return jsonify({"message": "Invalid Email or Password"}), 401
         
-    token = jwt.encode({
-        'user_id': str(user['_id']), 
-        'role': user.get('role', 'user')
-    }, app.config['SECRET_KEY'], algorithm="HS256")
-    
-    return jsonify({
-        'token': token, 
-        'role': user.get('role', 'user'),
-        'user_id': str(user['_id']),
-        'name': user.get('name'),
-        'email': user.get('email')
-    })
+    token = jwt.encode({'user_id': str(user['_id']), 'role': user.get('role', 'user')}, 
+                       app.config['SECRET_KEY'], algorithm="HS256")
+    return jsonify({'token': token, 'role': user.get('role', 'user'), 'user_id': str(user['_id']), 'name': user.get('name')})
 
-# 6. Admin Resolve with AI Validation
+# 5. Admin Resolve with AI Audit
 @app.route('/update_status/<report_id>', methods=['PATCH'])
 def update_status(report_id):
     try:
@@ -219,15 +193,12 @@ def update_status(report_id):
         res_path = os.path.join(UPLOAD_FOLDER, res_filename)
         file.save(res_path)
 
-        # AI Audit Check: Ensure road is actually fixed
         results = model.predict(source=res_path, conf=0.4)
         detected_potholes = len(results[0].boxes) if results and len(results) > 0 else 0
 
         if detected_potholes > 0:
-            os.remove(res_path) # Reject and cleanup file
-            return jsonify({
-                "error": f"Rejected: AI detected {detected_potholes} potholes still present."
-            }), 400
+            os.remove(res_path)
+            return jsonify({"error": f"Rejected: AI detected {detected_potholes} potholes still present."}), 400
 
         reports_collection.update_one(
             {"_id": ObjectId(report_id)},
@@ -241,11 +212,11 @@ def update_status(report_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 7. FIXED: Serve Uploaded Images
+# 6. FIXED: Serve Uploaded Images
 @app.route('/uploads/<path:filename>')
 def serve_uploads(filename):
-    # send_from_directory with os.getcwd() handles paths containing 'uploads/'
-    return send_from_directory(os.getcwd(), filename)
+    # This specifically looks inside the absolute UPLOAD_FOLDER path
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

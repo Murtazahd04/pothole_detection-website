@@ -6,29 +6,8 @@ const LandingPage = () => {
 
     return (
         <div className="min-h-screen bg-white font-sans flex flex-col">
-            {/* Custom Landing Navbar */}
-            <nav className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-[1000] shadow-sm">
-                <div className="flex items-center">
-                    <h1 className="text-xl font-black tracking-tighter text-slate-900 italic">
-                        POTHOLE<span className="text-blue-600">FIX</span>
-                    </h1>
-                </div>
-
-                {/* Only Login button shown, User name and history removed */}
-                <div>
-                    <button 
-                        onClick={() => navigate('/login')}
-                        className="bg-slate-900 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-slate-200 active:scale-95"
-                    >
-                        Login
-                    </button>
-                </div>
-            </nav>
-
             {/* Hero Section */}
             <div className="max-w-7xl mx-auto px-6 py-24 flex flex-col items-center text-center flex-grow">
-                {/* AI Badge Removed as requested */}
-                
                 <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter mb-8 italic">
                     ROADS THAT <span className="text-blue-600">THINK.</span>
                 </h1>

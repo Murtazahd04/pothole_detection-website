@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* Optional: Custom Theme Variables */
+@theme {
+  --color-brand: #2563eb;
+}
+
+/* Ensure smooth transitions for mode switching */
+body {
+  @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300;
+}

@@ -5,6 +5,7 @@ import Signup from './components/Signup';
 import AdminDashboard from './components/AdminDashboard'; 
 import UserDashboard from './components/UserDashboard';   
 import PotholeForm from './components/PotholeForm';
+import Navbar from './components/Navbar';
 import 'leaflet/dist/leaflet.css';
 
 /**
@@ -19,51 +20,76 @@ const PrivateRoute = ({ children, role }) => {
     if (!token) return <Navigate to="/login" />;
     
     // Role-Based Access Control: Admins stay on /admin, Users stay on /history
-    if (role === 'admin' && !userRole.includes('admin')) {
+    if (role === 'admin' && !userRole?.includes('admin')) {
         return <Navigate to="/history" />;
     }
     
     // Users trying to access admin routes are sent back to history
-    if (role === 'user' && userRole.includes('admin')) {
+    if (role === 'user' && userRole?.includes('admin')) {
         return <Navigate to="/admin" />;
     }
     
     return children;
 };
 
+/**
+ * Layout component that wraps all routes with the Navbar
+ */
+const AppLayout = ({ children }) => {
+    return (
+        <>
+            <Navbar />
+            {children}
+        </>
+    );
+};
+
 function App() {
     return (
         <BrowserRouter>
-            {/* Global Navbar is removed to favor the integrated headers in Dashboards.
-                This prevents the "Double Navbar" issue seen in previous versions.
-            */}
-            
             <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<LandingPage />} /> 
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
+                {/* Public Routes with Navbar */}
+                <Route path="/" element={
+                    <AppLayout>
+                        <LandingPage />
+                    </AppLayout>
+                } />
                 
-                {/* --- Protected Citizen/User Routes --- */}
+                <Route path="/login" element={
+                    <AppLayout>
+                        <Login />
+                    </AppLayout>
+                } />
                 
-                {/* 1. User History (Starting Dashboard) */}
+                <Route path="/signup" element={
+                    <AppLayout>
+                        <Signup />
+                    </AppLayout>
+                } />
+                
+                {/* Protected Citizen/User Routes with Navbar */}
                 <Route path="/history" element={
                     <PrivateRoute role="user">
-                        <UserDashboard />
+                        <AppLayout>
+                            <UserDashboard />
+                        </AppLayout>
                     </PrivateRoute>
                 } />
 
-                {/* 2. Report Form (Accessible from Dashboard) */}
                 <Route path="/report" element={
                     <PrivateRoute role="user">
-                        <PotholeForm />
+                        <AppLayout>
+                            <PotholeForm />
+                        </AppLayout>
                     </PrivateRoute>
                 } />
                 
-                {/* --- Protected Municipal Admin Route --- */}
+                {/* Protected Municipal Admin Route with Navbar */}
                 <Route path="/admin" element={
                     <PrivateRoute role="admin">
-                        <AdminDashboard />
+                        <AppLayout>
+                            <AdminDashboard />
+                        </AppLayout>
                     </PrivateRoute>
                 } />
                 

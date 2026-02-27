@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import axios from 'axios';
 import L from 'leaflet';
@@ -24,7 +24,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const AdminDashboard = () => {
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [showResolveCenter, setShowResolveCenter] = useState(false); // Toggle for view
+    const [showResolveCenter, setShowResolveCenter] = useState(false);
     
     const userRole = localStorage.getItem('role') || 'default';
     const BACKEND_URL = "http://localhost:5000";
@@ -72,7 +72,6 @@ const AdminDashboard = () => {
         } finally { setLoading(false); }
     };
 
-    // --- LOGIC: DATA FILTERING ---
     const pendingReports = reports.filter(r => r.status === 'Pending');
     const resolvedReports = reports.filter(r => r.status === 'Resolved');
 
@@ -84,33 +83,33 @@ const AdminDashboard = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
-            {/* Header Section */}
-            <header className="bg-slate-900 text-white p-5 shadow-lg flex justify-between items-center sticky top-0 z-[2000]">
-                <div>
-                    <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Pothole Admin</h1>
-                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-1">{currentConfig.name}</p>
-                </div>
-                
-                <div className="flex gap-4">
+            {/* Dashboard Header */}
+            <div className="p-6 pb-0">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-slate-900">
+                            Admin Dashboard
+                        </h1>
+                        <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">
+                            {currentConfig.name}
+                        </p>
+                    </div>
+                    
                     <button 
                         onClick={() => setShowResolveCenter(!showResolveCenter)}
                         className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                            showResolveCenter ? 'bg-white text-slate-900' : 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                            showResolveCenter 
+                                ? 'bg-white text-slate-900 border border-slate-200'
+                                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-900/20'
                         }`}
                     >
                         {showResolveCenter ? "← Back to Live Map" : "Open Resolve Center"}
                     </button>
-                    <button 
-                        onClick={() => { localStorage.clear(); window.location.href = '/login'; }}
-                        className="bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all"
-                    >
-                        Logout
-                    </button>
                 </div>
-            </header>
+            </div>
 
             {!showResolveCenter ? (
-                /* --- VIEW 1: LIVE MONITORING MAP (PENDING ONLY) --- */
+                /* VIEW 1: LIVE MONITORING MAP */
                 <div className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border-b-4 border-blue-500">
@@ -136,7 +135,7 @@ const AdminDashboard = () => {
                                         <Pie data={chartData} innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
                                             {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                         </Pie>
-                                        <Tooltip />
+                                        <Tooltip contentStyle={{ backgroundColor: '#fff', border: 'none', borderRadius: '8px' }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -146,7 +145,6 @@ const AdminDashboard = () => {
                             <MapContainer center={currentConfig.center} zoom={currentConfig.zoom} style={{ height: '550px', width: '100%' }}>
                                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                                 <MarkerClusterGroup chunkedLoading>
-                                    {/* Pins are strictly removed if Resolved */}
                                     {pendingReports.map((report) => (
                                         <Marker key={report._id} position={[parseFloat(report.coordinates?.lat || 0), parseFloat(report.coordinates?.lng || 0)]}>
                                             <Popup minWidth={280}>
@@ -159,8 +157,17 @@ const AdminDashboard = () => {
                                                         <p className="text-[11px] font-bold text-slate-700 leading-tight">{report.address}</p>
                                                     </div>
                                                     <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                                                        <input type="file" id={`file-${report._id}`} accept="image/*" className="text-[9px] w-full" />
-                                                        <button onClick={() => handleResolve(report._id)} disabled={loading} className="w-full bg-slate-900 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
+                                                        <input 
+                                                            type="file" 
+                                                            id={`file-${report._id}`} 
+                                                            accept="image/*" 
+                                                            className="text-[9px] w-full"
+                                                        />
+                                                        <button 
+                                                            onClick={() => handleResolve(report._id)} 
+                                                            disabled={loading} 
+                                                            className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors"
+                                                        >
                                                             {loading ? "AI Auditing..." : "Verify & Fix"}
                                                         </button>
                                                     </div>
@@ -174,21 +181,25 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             ) : (
-                /* --- VIEW 2: RESOLVE CENTER (BEFORE vs AFTER) --- */
+                /* VIEW 2: RESOLVE CENTER */
                 <div className="p-10 flex-1 overflow-y-auto">
                     <div className="mb-10">
-                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-green-500 decoration-8 underline-offset-[12px]">Resolve Center</h2>
-                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 italic">Verified Repair History & AI Verification Logs</p>
+                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-green-500 decoration-8 underline-offset-[12px]">
+                            Resolve Center
+                        </h2>
+                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 italic">
+                            Verified Repair History & AI Verification Logs
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-1 gap-12">
                         {resolvedReports.length === 0 ? (
-                            <div className="py-20 text-center bg-white rounded-[3rem] border-4 border-dashed border-slate-100">
-                                <p className="text-slate-300 font-black uppercase tracking-[0.4em]">No Resolved Potholes found in this region</p>
+                            <div className="py-20 text-center bg-white border-slate-100 rounded-[3rem] border-4 border-dashed">
+                                <p className="text-slate-400 font-black uppercase tracking-[0.4em]">No Resolved Potholes found in this region</p>
                             </div>
                         ) : (
                             resolvedReports.map((report) => (
-                                <div key={report._id} className="bg-white rounded-[3rem] overflow-hidden shadow-2xl shadow-slate-200 border border-white p-10 group transition-all hover:scale-[1.01]">
+                                <div key={report._id} className="bg-white border-white rounded-[3rem] overflow-hidden shadow-2xl shadow-slate-200 border p-10 group transition-all hover:scale-[1.01]">
                                     <div className="flex flex-col lg:flex-row gap-10">
                                         {/* Comparison Images */}
                                         <div className="lg:w-2/3 flex gap-4 h-80">
@@ -205,7 +216,9 @@ const AdminDashboard = () => {
                                         {/* Repair Meta Details */}
                                         <div className="lg:w-1/3 flex flex-col justify-center space-y-6">
                                             <div>
-                                                <span className="bg-green-50 text-green-600 text-[10px] font-black px-4 py-1 rounded-full uppercase border border-green-100">AI Verified Clean Road</span>
+                                                <span className="bg-green-50 text-green-600 border-green-100 text-[10px] font-black px-4 py-1 rounded-full uppercase border">
+                                                    AI Verified Clean Road
+                                                </span>
                                                 <h3 className="text-xl font-black text-slate-900 mt-4 leading-tight">{report.address}</h3>
                                             </div>
                                             <div className="space-y-4">
@@ -220,13 +233,17 @@ const AdminDashboard = () => {
                                                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm">📅</div>
                                                     <div>
                                                         <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Completion Date</p>
-                                                        <p className="text-xs font-bold text-slate-700">{new Date(report.resolved_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                                                        <p className="text-xs font-bold text-slate-700">
+                                                            {new Date(report.resolved_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="pt-6 border-t border-slate-50 flex items-center gap-2">
                                                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                                                <p className="text-[8px] font-black text-green-600 uppercase tracking-widest italic">Resolved status synchronized with central database</p>
+                                                <p className="text-[8px] font-black text-green-600 uppercase tracking-widest italic">
+                                                    Resolved status synchronized with central database
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
