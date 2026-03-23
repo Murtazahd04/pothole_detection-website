@@ -22,7 +22,8 @@ const RealTimeDetection = () => {
     const [isMobile, setIsMobile] = useState(false);
     
     const CONFIDENCE_THRESHOLD = 0.75; // 75% confidence threshold
-    const BACKEND_URL = "http://localhost:5000";
+    // Use environment variable for backend URL (for production)
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
     const userId = localStorage.getItem('user_id');
     const userName = localStorage.getItem('name') || "Citizen";
 
@@ -64,7 +65,8 @@ const RealTimeDetection = () => {
                     
                     try {
                         const res = await axios.get(`${BACKEND_URL}/get-municipality`, {
-                            params: { lat: latitude, lng: longitude }
+                            params: { lat: latitude, lng: longitude },
+                            timeout: 10000
                         });
                         setAddress(res.data.address);
                         setMunicipality({
@@ -73,11 +75,20 @@ const RealTimeDetection = () => {
                         });
                     } catch (err) {
                         console.error("Error getting location info:", err);
+                        setAddress(`Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+                        setMunicipality({
+                            code: "OTHER",
+                            name: "Unknown Area"
+                        });
                     }
                 },
                 (error) => {
                     console.error("Error getting location:", error);
-                    alert("Please enable location services to auto-detect your municipality.");
+                    let errorMessage = "Please enable location services";
+                    if (error.code === 1) errorMessage = "Location permission denied";
+                    else if (error.code === 2) errorMessage = "Location unavailable";
+                    else if (error.code === 3) errorMessage = "Location request timeout";
+                    alert(errorMessage);
                 }
             );
         } else {
@@ -115,6 +126,8 @@ const RealTimeDetection = () => {
         try {
             const res = await axios.post(`${BACKEND_URL}/detect-realtime`, {
                 image: imageSrc
+            }, {
+                timeout: 15000
             });
             
             if (res.data.success) {
@@ -147,6 +160,9 @@ const RealTimeDetection = () => {
             }
         } catch (err) {
             console.error("Detection error:", err);
+            if (err.code === 'ECONNABORTED') {
+                console.log("Detection request timeout");
+            }
         } finally {
             setIsProcessing(false);
         }
@@ -181,6 +197,8 @@ const RealTimeDetection = () => {
                 user_id: userId,
                 user_name: userName,
                 pothole_count: potholeCount
+            }, {
+                timeout: 20000
             });
             
             if (res.data.success) {
@@ -197,7 +215,7 @@ const RealTimeDetection = () => {
             }
         } catch (err) {
             console.error("Submission error:", err);
-            alert("Failed to submit report. Please try again.");
+            alert("Failed to submit report. Please check your internet connection and try again.");
         } finally {
             setIsProcessing(false);
         }
@@ -339,7 +357,7 @@ const RealTimeDetection = () => {
                                                     WebkitTransform: facingMode === "user" ? 'scaleX(-1)' : 'none'
                                                 }}
                                             />
-                                            {/* Detection Overlay - Only show high confidence detections */}
+                                            {/* Detection Overlay */}
                                             {detectionResult && detectionResult.boxes && detectionResult.boxes.length > 0 && webcamRef.current?.video && (
                                                 <div className="absolute inset-0 pointer-events-none">
                                                     {detectionResult.boxes.map((box, idx) => {
