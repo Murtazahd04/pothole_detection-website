@@ -101,6 +101,18 @@ const Navbar = () => {
                                     Report Pothole
                                 </Link>
                                 
+                                {/* Real-Time Detection Link */}
+                                <Link 
+                                    to="/realtime" 
+                                    className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
+                                        location.pathname === '/realtime' 
+                                            ? 'text-blue-600' 
+                                            : 'text-slate-600 hover:text-blue-600'
+                                    }`}
+                                >
+                                    Real-Time Detection
+                                </Link>
+                                
                                 {/* History Link with Tailwind Notification Badge */}
                                 <Link 
                                     to="/history" 

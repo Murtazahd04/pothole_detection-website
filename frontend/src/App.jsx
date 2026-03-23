@@ -5,6 +5,7 @@ import Signup from './components/Signup';
 import AdminDashboard from './components/AdminDashboard'; 
 import UserDashboard from './components/UserDashboard';   
 import PotholeForm from './components/PotholeForm';
+import RealTimeDetection from './components/RealTimeDetection';
 import Navbar from './components/Navbar';
 import 'leaflet/dist/leaflet.css';
 
@@ -80,6 +81,15 @@ function App() {
                     <PrivateRoute role="user">
                         <AppLayout>
                             <PotholeForm />
+                        </AppLayout>
+                    </PrivateRoute>
+                } />
+                
+                {/* Real-Time Detection Route */}
+                <Route path="/realtime" element={
+                    <PrivateRoute role="user">
+                        <AppLayout>
+                            <RealTimeDetection />
                         </AppLayout>
                     </PrivateRoute>
                 } />

@@ -63,19 +63,37 @@ const UserDashboard = () => {
                         </p>
                     </div>
                     
-                    <button 
-                        onClick={() => navigate('/report')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-2xl shadow-blue-200 active:scale-95 transition-all"
-                    >
-                        Report Pothole +
-                    </button>
+                    <div className="flex gap-4">
+                        {/* Real-Time Detection Button */}
+                        <button 
+                            onClick={() => navigate('/realtime')}
+                            className="bg-green-600 hover:bg-green-700 text-white px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-2xl shadow-green-200 active:scale-95 transition-all flex items-center gap-2"
+                        >
+                            🎥 Real-Time Detection
+                        </button>
+                        
+                        {/* Report Pothole Button */}
+                        <button 
+                            onClick={() => navigate('/report')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-2xl shadow-blue-200 active:scale-95 transition-all"
+                        >
+                            Report Pothole +
+                        </button>
+                    </div>
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
                     {myReports.length === 0 ? (
                         <div className="col-span-full py-24 text-center bg-white rounded-[3.5rem] border-4 border-dashed border-slate-100 shadow-inner">
                             <p className="text-slate-300 font-black uppercase tracking-[0.4em] text-sm">No Active Reports Found</p>
-                            <button onClick={() => navigate('/report')} className="mt-4 text-blue-600 font-black text-[11px] uppercase tracking-widest hover:underline">Start your first report</button>
+                            <div className="flex gap-4 justify-center mt-4">
+                                <button onClick={() => navigate('/realtime')} className="mt-4 bg-green-600 text-white px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg">
+                                    🎥 Start Real-Time Detection
+                                </button>
+                                <button onClick={() => navigate('/report')} className="mt-4 text-blue-600 font-black text-[11px] uppercase tracking-widest hover:underline">
+                                    Or report manually
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         myReports.map((report) => (
@@ -125,6 +143,20 @@ const UserDashboard = () => {
                                         <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Geo-Tagged Address</p>
                                         <p className="text-xs text-slate-600 font-bold leading-relaxed line-clamp-2 italic">{report.address || "Fetching exact coordinates..."}</p>
                                     </div>
+
+                                    {/* Municipality Badge */}
+                                    {report.municipality && (
+                                        <div className="mt-3">
+                                            <span className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                                                report.municipality === 'BMC' ? 'bg-blue-100 text-blue-700' :
+                                                report.municipality === 'TMC' ? 'bg-green-100 text-green-700' :
+                                                report.municipality === 'NMMC' ? 'bg-purple-100 text-purple-700' :
+                                                'bg-gray-100 text-gray-600'
+                                            }`}>
+                                                {report.municipality}
+                                            </span>
+                                        </div>
+                                    )}
 
                                     {report.status === 'Resolved' && (
                                         <div className="mt-auto pt-8 border-t border-slate-50 flex justify-between items-center">

@@ -11,6 +11,11 @@ from geopy.geocoders import Nominatim
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+import base64
+from io import BytesIO
+from PIL import Image
+import cv2
+import numpy as np
 
 load_dotenv()
 
@@ -22,12 +27,32 @@ CORS(app, resources={r"/*": {"origins": "*"}},
      allow_headers=['Content-Type', 'x-access-token'])
 
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "mumbai_university_it_2026")
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# --- CONFIGURATION (Fixed for Absolute Pathing) ---
+# --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 geolocator = Nominatim(user_agent="pothole_fix_system")
+
+# Municipality boundaries (approximate lat/lng ranges)
+MUNICIPALITY_BOUNDARIES = {
+    "BMC": {  # Mumbai
+        "lat_range": [18.89, 19.30],
+        "lng_range": [72.77, 72.99],
+        "name": "Brihanmumbai Municipal Corporation"
+    },
+    "TMC": {  # Thane
+        "lat_range": [19.15, 19.35],
+        "lng_range": [72.95, 73.10],
+        "name": "Thane Municipal Corporation"
+    },
+    "NMMC": {  # Navi Mumbai
+        "lat_range": [18.95, 19.15],
+        "lng_range": [72.95, 73.10],
+        "name": "Navi Mumbai Municipal Corporation"
+    }
+}
 
 # --- DATABASE & MODEL INITIALIZATION ---
 try:
@@ -39,6 +64,34 @@ try:
     print("✅ YOLO Model & MongoDB Connected Successfully")
 except Exception as e:
     print(f"❌ Initialization Error: {e}")
+
+# --- HELPER FUNCTIONS ---
+def detect_municipality_by_coordinates(lat, lng):
+    """Determine municipality based on coordinates"""
+    for muni_id, bounds in MUNICIPALITY_BOUNDARIES.items():
+        if (bounds["lat_range"][0] <= lat <= bounds["lat_range"][1] and
+            bounds["lng_range"][0] <= lng <= bounds["lng_range"][1]):
+            return muni_id
+    return "OTHER"
+
+def detect_municipality_by_address(address):
+    """Fallback: determine municipality by address text"""
+    addr_lower = address.lower()
+    if "thane" in addr_lower:
+        return "TMC"
+    elif "mumbai" in addr_lower or "bmc" in addr_lower:
+        return "BMC"
+    elif "navi mumbai" in addr_lower or "nmmc" in addr_lower:
+        return "NMMC"
+    return "OTHER"
+
+def reverse_geocode(lat, lng):
+    """Get address from coordinates"""
+    try:
+        location = geolocator.reverse(f"{lat}, {lng}")
+        return location.address if location else "Address not found"
+    except:
+        return f"Coordinates: {lat}, {lng}"
 
 # --- AUTH DECORATOR ---
 def token_required(f):
@@ -63,7 +116,158 @@ def token_required(f):
 def home():
     return jsonify({"message": "Pothole Detection API is Live 🚀"})
 
-# 1. Pothole Detection & Reporting Route
+# 1. Real-time Detection Route (Base64 Image)
+@app.route('/detect-realtime', methods=['POST'])
+def detect_realtime():
+    """Endpoint for real-time detection from mobile camera"""
+    try:
+        data = request.get_json()
+        
+        if 'image' not in data:
+            return jsonify({"error": "No image data"}), 400
+        
+        # Decode base64 image
+        image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
+        image_bytes = base64.b64decode(image_data)
+        image = Image.open(BytesIO(image_bytes))
+        
+        # Save temporary file for prediction
+        temp_filename = f"realtime_{datetime.now().timestamp()}.jpg"
+        temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+        image.save(temp_path)
+        
+        try:
+            # Run YOLO prediction
+            results = model.predict(source=temp_path, conf=0.4)
+            pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
+            
+            # Get bounding boxes
+            boxes = []
+            if pothole_count > 0 and results[0].boxes is not None:
+                for box in results[0].boxes:
+                    boxes.append({
+                        'x1': float(box.xyxy[0][0]),
+                        'y1': float(box.xyxy[0][1]),
+                        'x2': float(box.xyxy[0][2]),
+                        'y2': float(box.xyxy[0][3]),
+                        'confidence': float(box.conf[0])
+                    })
+            
+            # Clean up temp file
+            os.remove(temp_path)
+            
+            return jsonify({
+                "success": True,
+                "pothole_count": pothole_count,
+                "boxes": boxes,
+                "detected": pothole_count > 0
+            }), 200
+            
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return jsonify({"error": str(e)}), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 2. Auto Report Route (with automatic location detection)
+@app.route('/auto-report', methods=['POST'])
+def auto_report():
+    """Endpoint for auto-reporting with location and camera capture"""
+    try:
+        data = request.get_json()
+        
+        # Required fields
+        if 'image' not in data:
+            return jsonify({"error": "No image data"}), 400
+        
+        if 'latitude' not in data or 'longitude' not in data:
+            return jsonify({"error": "Location coordinates required"}), 400
+        
+        user_id = data.get('user_id')
+        user_name = data.get('user_name', "Anonymous")
+        
+        lat = float(data['latitude'])
+        lng = float(data['longitude'])
+        
+        # Get address from coordinates
+        address = reverse_geocode(lat, lng)
+        
+        # Determine municipality
+        municipality = detect_municipality_by_coordinates(lat, lng)
+        if municipality == "OTHER":
+            municipality = detect_municipality_by_address(address)
+        
+        # Decode and save image
+        image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
+        image_bytes = base64.b64decode(image_data)
+        
+        # Save image
+        img_filename = f"auto_{datetime.now().timestamp()}.jpg"
+        img_path = os.path.join(UPLOAD_FOLDER, img_filename)
+        
+        image = Image.open(BytesIO(image_bytes))
+        image.save(img_path)
+        
+        # Run prediction
+        results = model.predict(source=img_path, conf=0.4)
+        pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
+        
+        # Create report
+        report_data = {
+            "user_id": user_id,
+            "user_name": user_name,
+            "pothole_count": pothole_count,
+            "coordinates": {"lat": lat, "lng": lng},
+            "address": address,
+            "municipality": municipality,
+            "status": "Pending",
+            "image_url": f"uploads/{img_filename}",
+            "auto_detected": True,
+            "created_at": datetime.now()
+        }
+        
+        inserted = reports_collection.insert_one(report_data)
+        
+        return jsonify({
+            "success": True,
+            "message": "Report submitted automatically!",
+            "report_id": str(inserted.inserted_id),
+            "pothole_count": pothole_count,
+            "municipality": municipality,
+            "municipality_name": MUNICIPALITY_BOUNDARIES.get(municipality, {}).get("name", "Unknown")
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 3. Get Municipality Info by Coordinates
+@app.route('/get-municipality', methods=['GET'])
+def get_municipality():
+    """Get municipality info from coordinates"""
+    try:
+        lat = float(request.args.get('lat', 0))
+        lng = float(request.args.get('lng', 0))
+        
+        if lat == 0 or lng == 0:
+            return jsonify({"error": "Coordinates required"}), 400
+        
+        municipality = detect_municipality_by_coordinates(lat, lng)
+        address = reverse_geocode(lat, lng)
+        
+        return jsonify({
+            "municipality": municipality,
+            "municipality_name": MUNICIPALITY_BOUNDARIES.get(municipality, {}).get("name", "Unknown"),
+            "address": address,
+            "lat": lat,
+            "lng": lng
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 4. Regular Report Route (existing)
 @app.route('/report', methods=['POST'])
 def report_pothole():
     if 'image' not in request.files:
@@ -87,32 +291,38 @@ def report_pothole():
         results = model.predict(source=img_path, conf=0.4)
         pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
 
-        assigned_municipality = "OTHER"
-        addr_lower = address.lower()
-        if "thane" in addr_lower: assigned_municipality = "TMC"
-        elif "mumbai" in addr_lower or "bmc" in addr_lower: assigned_municipality = "BMC"
-        elif "navi mumbai" in addr_lower: assigned_municipality = "NMMC"
+        # Determine municipality
+        lat_float = float(lat)
+        lng_float = float(lng)
+        municipality = detect_municipality_by_coordinates(lat_float, lng_float)
+        if municipality == "OTHER":
+            municipality = detect_municipality_by_address(address)
 
         report_data = {
             "user_id": user_id,
             "user_name": request.form.get('user_name'),
             "user_email": request.form.get('user_email'),
             "pothole_count": pothole_count,
-            "coordinates": {"lat": float(lat), "lng": float(lng)},
+            "coordinates": {"lat": lat_float, "lng": lng_float},
             "address": address,
-            "municipality": assigned_municipality,
+            "municipality": municipality,
             "status": "Pending",
             "image_url": f"uploads/{img_filename}",
             "created_at": datetime.now()
         }
 
         inserted = reports_collection.insert_one(report_data)
-        return jsonify({"message": "Report created", "id": str(inserted.inserted_id), "count": pothole_count}), 201
+        return jsonify({
+            "message": "Report created", 
+            "id": str(inserted.inserted_id), 
+            "count": pothole_count,
+            "municipality": municipality
+        }), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 2. Prediction Route
+# 5. Prediction Route (existing)
 @app.route('/predict', methods=['POST'])
 def predict_only():
     if 'image' not in request.files:
@@ -131,7 +341,7 @@ def predict_only():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 3. Fetch Reports
+# 6. Fetch Reports (existing)
 @app.route('/reports', methods=['GET'])
 def get_reports():
     admin_role = request.args.get('role')
@@ -151,7 +361,7 @@ def get_reports():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 4. Auth Routes
+# 7. Auth Routes (existing)
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -178,9 +388,14 @@ def login():
         
     token = jwt.encode({'user_id': str(user['_id']), 'role': user.get('role', 'user')}, 
                        app.config['SECRET_KEY'], algorithm="HS256")
-    return jsonify({'token': token, 'role': user.get('role', 'user'), 'user_id': str(user['_id']), 'name': user.get('name')})
+    return jsonify({
+        'token': token, 
+        'role': user.get('role', 'user'), 
+        'user_id': str(user['_id']), 
+        'name': user.get('name')
+    })
 
-# 5. Admin Resolve with AI Audit
+# 8. Admin Resolve with AI Audit (existing)
 @app.route('/update_status/<report_id>', methods=['PATCH'])
 def update_status(report_id):
     try:
@@ -212,10 +427,21 @@ def update_status(report_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 6. FIXED: Serve Uploaded Images
+# 9. Delete Report (for users)
+@app.route('/reports/<report_id>', methods=['DELETE'])
+def delete_report(report_id):
+    try:
+        # Find and delete the report
+        result = reports_collection.delete_one({"_id": ObjectId(report_id)})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Report not found"}), 404
+        return jsonify({"message": "Report deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 10. Serve Uploaded Images
 @app.route('/uploads/<path:filename>')
 def serve_uploads(filename):
-    # This specifically looks inside the absolute UPLOAD_FOLDER path
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
