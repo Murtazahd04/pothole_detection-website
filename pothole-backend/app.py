@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from ultralytics import YOLO
@@ -21,13 +21,13 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Updated CORS for React frontend compatibility
-CORS(app, resources={r"/*": {"origins": "*"}}, 
+# CORS configuration for production
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://your-frontend-url.vercel.app"]}}, 
      expose_headers=['x-access-token'], 
      allow_headers=['Content-Type', 'x-access-token'])
 
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "mumbai_university_it_2026")
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,19 +35,19 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 geolocator = Nominatim(user_agent="pothole_fix_system")
 
-# Municipality boundaries (approximate lat/lng ranges)
+# Municipality boundaries
 MUNICIPALITY_BOUNDARIES = {
-    "BMC": {  # Mumbai
+    "BMC": {
         "lat_range": [18.89, 19.30],
         "lng_range": [72.77, 72.99],
         "name": "Brihanmumbai Municipal Corporation"
     },
-    "TMC": {  # Thane
+    "TMC": {
         "lat_range": [19.15, 19.35],
         "lng_range": [72.95, 73.10],
         "name": "Thane Municipal Corporation"
     },
-    "NMMC": {  # Navi Mumbai
+    "NMMC": {
         "lat_range": [18.95, 19.15],
         "lng_range": [72.95, 73.10],
         "name": "Navi Mumbai Municipal Corporation"
@@ -56,18 +56,43 @@ MUNICIPALITY_BOUNDARIES = {
 
 # --- DATABASE & MODEL INITIALIZATION ---
 try:
-    model = YOLO(os.path.join(BASE_DIR, 'model', 'best.pt'))
-    client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
+    # Load model
+    model_path = os.path.join(BASE_DIR, 'model', 'best.pt')
+    if os.path.exists(model_path):
+        model = YOLO(model_path)
+        print("✅ YOLO Model Loaded Successfully")
+    else:
+        print(f"⚠️ Model file not found at {model_path}")
+        model = None
+    
+    # MongoDB Atlas connection
+    mongo_uri = os.getenv("MONGO_URI")
+    if not mongo_uri:
+        print("❌ MONGO_URI not found in environment variables")
+        raise Exception("MONGO_URI not configured")
+    
+    client = MongoClient(mongo_uri)
+    # Test connection
+    client.admin.command('ping')
+    print("✅ MongoDB Atlas Connected Successfully")
+    
     db = client['pothole_db']
     reports_collection = db['reports']
     users_collection = db['users']
-    print("✅ YOLO Model & MongoDB Connected Successfully")
+    
+    # Create indexes for better performance
+    reports_collection.create_index([("coordinates", "2dsphere")])
+    reports_collection.create_index("user_id")
+    reports_collection.create_index("status")
+    users_collection.create_index("email", unique=True)
+    
 except Exception as e:
     print(f"❌ Initialization Error: {e}")
+    model = None
+    client = None
 
 # --- HELPER FUNCTIONS ---
 def detect_municipality_by_coordinates(lat, lng):
-    """Determine municipality based on coordinates"""
     for muni_id, bounds in MUNICIPALITY_BOUNDARIES.items():
         if (bounds["lat_range"][0] <= lat <= bounds["lat_range"][1] and
             bounds["lng_range"][0] <= lng <= bounds["lng_range"][1]):
@@ -75,7 +100,6 @@ def detect_municipality_by_coordinates(lat, lng):
     return "OTHER"
 
 def detect_municipality_by_address(address):
-    """Fallback: determine municipality by address text"""
     addr_lower = address.lower()
     if "thane" in addr_lower:
         return "TMC"
@@ -86,7 +110,6 @@ def detect_municipality_by_address(address):
     return "OTHER"
 
 def reverse_geocode(lat, lng):
-    """Get address from coordinates"""
     try:
         location = geolocator.reverse(f"{lat}, {lng}")
         return location.address if location else "Address not found"
@@ -111,37 +134,44 @@ def token_required(f):
     return decorated
 
 # --- ROUTES ---
-
 @app.route('/')
 def home():
-    return jsonify({"message": "Pothole Detection API is Live 🚀"})
+    return jsonify({"message": "Pothole Detection API is Live 🚀", "status": "running"})
 
-# 1. Real-time Detection Route (Base64 Image)
+@app.route('/health')
+def health():
+    db_status = "connected" if client else "disconnected"
+    model_status = "loaded" if model else "not loaded"
+    return jsonify({
+        "status": "healthy",
+        "database": db_status,
+        "model": model_status
+    })
+
+# Real-time detection endpoint
 @app.route('/detect-realtime', methods=['POST'])
 def detect_realtime():
-    """Endpoint for real-time detection from mobile camera"""
+    if not model:
+        return jsonify({"error": "Model not loaded"}), 503
+    
     try:
         data = request.get_json()
         
         if 'image' not in data:
             return jsonify({"error": "No image data"}), 400
         
-        # Decode base64 image
         image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
         image_bytes = base64.b64decode(image_data)
         image = Image.open(BytesIO(image_bytes))
         
-        # Save temporary file for prediction
         temp_filename = f"realtime_{datetime.now().timestamp()}.jpg"
         temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
         image.save(temp_path)
         
         try:
-            # Run YOLO prediction
             results = model.predict(source=temp_path, conf=0.4)
             pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
             
-            # Get bounding boxes
             boxes = []
             if pothole_count > 0 and results[0].boxes is not None:
                 for box in results[0].boxes:
@@ -153,7 +183,6 @@ def detect_realtime():
                         'confidence': float(box.conf[0])
                     })
             
-            # Clean up temp file
             os.remove(temp_path)
             
             return jsonify({
@@ -171,14 +200,12 @@ def detect_realtime():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 2. Auto Report Route (with automatic location detection)
+# Auto-report endpoint
 @app.route('/auto-report', methods=['POST'])
 def auto_report():
-    """Endpoint for auto-reporting with location and camera capture"""
     try:
         data = request.get_json()
         
-        # Required fields
         if 'image' not in data:
             return jsonify({"error": "No image data"}), 400
         
@@ -191,30 +218,22 @@ def auto_report():
         lat = float(data['latitude'])
         lng = float(data['longitude'])
         
-        # Get address from coordinates
         address = reverse_geocode(lat, lng)
-        
-        # Determine municipality
         municipality = detect_municipality_by_coordinates(lat, lng)
         if municipality == "OTHER":
             municipality = detect_municipality_by_address(address)
         
-        # Decode and save image
         image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
         image_bytes = base64.b64decode(image_data)
         
-        # Save image
         img_filename = f"auto_{datetime.now().timestamp()}.jpg"
         img_path = os.path.join(UPLOAD_FOLDER, img_filename)
         
         image = Image.open(BytesIO(image_bytes))
         image.save(img_path)
         
-        # Run prediction
-        results = model.predict(source=img_path, conf=0.4)
-        pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
+        pothole_count = data.get('pothole_count', 0)
         
-        # Create report
         report_data = {
             "user_id": user_id,
             "user_name": user_name,
@@ -242,10 +261,9 @@ def auto_report():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 3. Get Municipality Info by Coordinates
+# Get municipality by coordinates
 @app.route('/get-municipality', methods=['GET'])
 def get_municipality():
-    """Get municipality info from coordinates"""
     try:
         lat = float(request.args.get('lat', 0))
         lng = float(request.args.get('lng', 0))
@@ -267,7 +285,7 @@ def get_municipality():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 4. Regular Report Route (existing)
+# Regular report route
 @app.route('/report', methods=['POST'])
 def report_pothole():
     if 'image' not in request.files:
@@ -288,10 +306,12 @@ def report_pothole():
     file.save(img_path)
 
     try:
-        results = model.predict(source=img_path, conf=0.4)
-        pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
+        if model:
+            results = model.predict(source=img_path, conf=0.4)
+            pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
+        else:
+            pothole_count = 0
 
-        # Determine municipality
         lat_float = float(lat)
         lng_float = float(lng)
         municipality = detect_municipality_by_coordinates(lat_float, lng_float)
@@ -322,36 +342,21 @@ def report_pothole():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 5. Prediction Route (existing)
-@app.route('/predict', methods=['POST'])
-def predict_only():
-    if 'image' not in request.files:
-        return jsonify({"error": "No image"}), 400
-    
-    file = request.files['image']
-    filename = secure_filename(file.filename)
-    temp_path = os.path.join(UPLOAD_FOLDER, f"temp_{filename}")
-    file.save(temp_path)
-    
-    try:
-        results = model.predict(source=temp_path, conf=0.4)
-        count = len(results[0].boxes) if results and len(results) > 0 else 0
-        os.remove(temp_path) 
-        return jsonify({"pothole_count": count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# 6. Fetch Reports (existing)
+# Fetch reports
 @app.route('/reports', methods=['GET'])
 def get_reports():
     admin_role = request.args.get('role')
     user_id = request.args.get('user_id')
     query = {} 
     
-    if admin_role == 'admin-tmc': query = {"municipality": "TMC"}
-    elif admin_role == 'admin-bmc': query = {"municipality": "BMC"}
-    elif admin_role == 'admin-nmmc': query = {"municipality": "NMMC"}
-    elif user_id: query = {"user_id": user_id}
+    if admin_role == 'admin-tmc': 
+        query = {"municipality": "TMC"}
+    elif admin_role == 'admin-bmc': 
+        query = {"municipality": "BMC"}
+    elif admin_role == 'admin-nmmc': 
+        query = {"municipality": "NMMC"}
+    elif user_id: 
+        query = {"user_id": user_id}
         
     try:
         reports = list(reports_collection.find(query).sort("created_at", -1))
@@ -361,7 +366,7 @@ def get_reports():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 7. Auth Routes (existing)
+# Auth routes
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -374,7 +379,8 @@ def signup():
         "email": data['email'],
         "password": hashed_password,
         "municipality": data.get('municipality', 'TMC'),
-        "role": data.get('role', 'user')
+        "role": data.get('role', 'user'),
+        "created_at": datetime.now()
     })
     return jsonify({"message": "User created successfully"}), 201
 
@@ -386,8 +392,12 @@ def login():
     if not user or not check_password_hash(user['password'], data['password']):
         return jsonify({"message": "Invalid Email or Password"}), 401
         
-    token = jwt.encode({'user_id': str(user['_id']), 'role': user.get('role', 'user')}, 
-                       app.config['SECRET_KEY'], algorithm="HS256")
+    token = jwt.encode({
+        'user_id': str(user['_id']), 
+        'role': user.get('role', 'user'),
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+    
     return jsonify({
         'token': token, 
         'role': user.get('role', 'user'), 
@@ -395,7 +405,7 @@ def login():
         'name': user.get('name')
     })
 
-# 8. Admin Resolve with AI Audit (existing)
+# Update status (admin resolve)
 @app.route('/update_status/<report_id>', methods=['PATCH'])
 def update_status(report_id):
     try:
@@ -408,12 +418,13 @@ def update_status(report_id):
         res_path = os.path.join(UPLOAD_FOLDER, res_filename)
         file.save(res_path)
 
-        results = model.predict(source=res_path, conf=0.4)
-        detected_potholes = len(results[0].boxes) if results and len(results) > 0 else 0
+        if model:
+            results = model.predict(source=res_path, conf=0.4)
+            detected_potholes = len(results[0].boxes) if results and len(results) > 0 else 0
 
-        if detected_potholes > 0:
-            os.remove(res_path)
-            return jsonify({"error": f"Rejected: AI detected {detected_potholes} potholes still present."}), 400
+            if detected_potholes > 0:
+                os.remove(res_path)
+                return jsonify({"error": f"Rejected: AI detected {detected_potholes} potholes still present."}), 400
 
         reports_collection.update_one(
             {"_id": ObjectId(report_id)},
@@ -427,11 +438,10 @@ def update_status(report_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 9. Delete Report (for users)
+# Delete report
 @app.route('/reports/<report_id>', methods=['DELETE'])
 def delete_report(report_id):
     try:
-        # Find and delete the report
         result = reports_collection.delete_one({"_id": ObjectId(report_id)})
         if result.deleted_count == 0:
             return jsonify({"error": "Report not found"}), 404
@@ -439,10 +449,11 @@ def delete_report(report_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 10. Serve Uploaded Images
+# Serve uploaded images
 @app.route('/uploads/<path:filename>')
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)

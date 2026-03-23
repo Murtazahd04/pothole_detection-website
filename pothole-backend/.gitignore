@@ -1,4 +1,118 @@
-venv/
-.env
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Uploads directory
+uploads/
 uploads/*
+!uploads/.gitkeep
+
+# Model files - COMMENT THIS OUT FOR NOW
+# model/
+# model/*
+# !model/.gitkeep
+# *.pt
+# *.pth
+# *.h5
+# *.weights
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+error_log/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# Flask
+instance/
+.webassets-cache
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Backup files
+*.bak
+*.backup
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+*.pyc
+*.pyo
+*.pyd
+*.pid
+*.seed
+*.log
+*.csv
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Secret files
+secrets.json
+config.local.py
+credentials.json
