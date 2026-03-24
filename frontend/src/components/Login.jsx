@@ -63,6 +63,18 @@ const Login = () => {
             <div className="flex-1 flex items-center justify-center p-6">
                 <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-100 transition-all hover:shadow-blue-100">
                     
+                    {/* Logo */}
+                    <div className="flex justify-center mb-6">
+                        <img 
+                            src="/logo.png" 
+                            alt="PotholeFix Logo" 
+                            className="h-16 w-auto"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                            }}
+                        />
+                    </div>
+                    
                     {/* Header Section */}
                     <div className="text-center mb-8">
                         <div className="inline-block p-4 bg-slate-900 rounded-3xl mb-4">

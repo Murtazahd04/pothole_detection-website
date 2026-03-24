@@ -8,6 +8,13 @@ const LandingPage = () => {
         <div className="min-h-screen bg-white font-sans flex flex-col">
             {/* Hero Section */}
             <div className="max-w-7xl mx-auto px-6 py-24 flex flex-col items-center text-center flex-grow">
+                {/* Logo in Hero */}
+                <img 
+                    src="/logo.png" 
+                    alt="PotholeFix Logo" 
+                    className="h-24 w-auto md:h-32 mb-8"
+                />
+                
                 <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter mb-8 italic">
                     ROADS THAT <span className="text-blue-600">THINK.</span>
                 </h1>
@@ -58,9 +65,16 @@ const LandingPage = () => {
             <footer className="bg-white border-t border-slate-100 py-12">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="flex flex-col items-center md:items-start">
-                        <h2 className="text-xl font-black tracking-tighter text-slate-900 italic">
-                            POTHOLE<span className="text-blue-600">FIX</span>
-                        </h2>
+                        <div className="flex items-center gap-2">
+                            <img 
+                                src="/logo.png" 
+                                alt="PotholeFix Logo" 
+                                className="h-8 w-auto"
+                            />
+                            <h2 className="text-xl font-black tracking-tighter text-slate-900 italic">
+                                POTHOLE<span className="text-blue-600">FIX</span>
+                            </h2>
+                        </div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">
                             © 2026 Mumbai University IT Project
                         </p>

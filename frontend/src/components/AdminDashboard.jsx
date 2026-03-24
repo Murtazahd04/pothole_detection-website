@@ -84,14 +84,25 @@ const AdminDashboard = () => {
         <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
             {/* Dashboard Header */}
             <div className="p-6 pb-0">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-slate-900">
-                            Admin Dashboard
-                        </h1>
-                        <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">
-                            {currentConfig.name}
-                        </p>
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                        {/* Logo */}
+                        <img 
+                            src="/logo.png" 
+                            alt="PotholeFix Logo" 
+                            className="h-12 w-auto"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                            }}
+                        />
+                        <div>
+                            <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-slate-900">
+                                Admin Dashboard
+                            </h1>
+                            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">
+                                {currentConfig.name}
+                            </p>
+                        </div>
                     </div>
                     
                     <button 
@@ -182,18 +193,39 @@ const AdminDashboard = () => {
             ) : (
                 /* VIEW 2: RESOLVE CENTER */
                 <div className="p-10 flex-1 overflow-y-auto">
-                    <div className="mb-10">
-                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-green-500 decoration-8 underline-offset-[12px]">
-                            Resolve Center
-                        </h2>
-                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 italic">
-                            Verified Repair History & AI Verification Logs
-                        </p>
+                    <div className="mb-10 flex items-center gap-4">
+                        {/* Logo in Resolve Center */}
+                        <img 
+                            src="/logo.png" 
+                            alt="PotholeFix Logo" 
+                            className="h-12 w-auto"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                            }}
+                        />
+                        <div>
+                            <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-green-500 decoration-8 underline-offset-[12px]">
+                                Resolve Center
+                            </h2>
+                            <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 italic">
+                                Verified Repair History & AI Verification Logs
+                            </p>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-12">
                         {resolvedReports.length === 0 ? (
                             <div className="py-20 text-center bg-white border-slate-100 rounded-[3rem] border-4 border-dashed">
+                                <div className="flex justify-center mb-4">
+                                    <img 
+                                        src="/logo.png" 
+                                        alt="PotholeFix Logo" 
+                                        className="h-20 w-auto opacity-50"
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                        }}
+                                    />
+                                </div>
                                 <p className="text-slate-400 font-black uppercase tracking-[0.4em]">No Resolved Potholes found in this region</p>
                             </div>
                         ) : (

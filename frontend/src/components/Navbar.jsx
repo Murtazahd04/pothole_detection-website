@@ -66,13 +66,23 @@ const Navbar = () => {
     return (
         <nav className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-[1000] shadow-sm font-sans">
             <div className="flex items-center gap-8">
-                {/* Brand Logo */}
-                <h1 
-                    className="text-xl font-black tracking-tighter text-slate-900 italic cursor-pointer"
+                {/* Brand Logo with Image */}
+                <div 
+                    className="flex items-center gap-2 cursor-pointer"
                     onClick={() => navigate('/')}
                 >
-                    POTHOLE<span className="text-blue-600">FIX</span>
-                </h1>
+                    <img 
+                        src="/logo.png" 
+                        alt="PotholeFix Logo" 
+                        className="h-8 w-auto md:h-10"
+                        onError={(e) => {
+                            e.target.style.display = 'none';
+                        }}
+                    />
+                    <h1 className="text-xl font-black tracking-tighter text-slate-900 italic hidden md:block">
+                        POTHOLE<span className="text-blue-600">FIX</span>
+                    </h1>
+                </div>
                 
                 {/* Role-Based Navigation Links - Only show when logged in and not on landing/auth pages */}
                 {isLoggedIn && !isLandingPage && !isAuthPage && (

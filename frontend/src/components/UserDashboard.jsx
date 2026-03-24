@@ -52,14 +52,25 @@ const UserDashboard = () => {
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
             <div className="p-6 md:p-12">
-                <header className="mb-14 flex justify-between items-end">
-                    <div>
-                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-blue-500 decoration-8 underline-offset-[12px]">
-                            Report History
-                        </h2>
-                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 ml-1 italic leading-relaxed">
-                            Monitor and track all submitted reports
-                        </p>
+                <header className="mb-14 flex justify-between items-end flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                        {/* Logo */}
+                        <img 
+                            src="/logo.png" 
+                            alt="PotholeFix Logo" 
+                            className="h-12 w-auto"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                            }}
+                        />
+                        <div>
+                            <h2 className="text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-blue-500 decoration-8 underline-offset-[12px]">
+                                Report History
+                            </h2>
+                            <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-6 ml-1 italic leading-relaxed">
+                                Monitor and track all submitted reports
+                            </p>
+                        </div>
                     </div>
                     
                     <div className="flex gap-4">
@@ -84,6 +95,16 @@ const UserDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
                     {myReports.length === 0 ? (
                         <div className="col-span-full py-24 text-center bg-white rounded-[3.5rem] border-4 border-dashed border-slate-100 shadow-inner">
+                            <div className="flex justify-center mb-4">
+                                <img 
+                                    src="/logo.png" 
+                                    alt="PotholeFix Logo" 
+                                    className="h-20 w-auto opacity-50"
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                    }}
+                                />
+                            </div>
                             <p className="text-slate-300 font-black uppercase tracking-[0.4em] text-sm">No Active Reports Found</p>
                             <div className="flex gap-4 justify-center mt-4">
                                 <button onClick={() => navigate('/realtime')} className="mt-4 bg-green-600 text-white px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg">
