@@ -9,7 +9,7 @@ const Login = () => {
     const [recoveryData, setRecoveryData] = useState({ email: '', answer: '', newPassword: '' });
     
     const navigate = useNavigate();
-    const BACKEND_URL = "http://localhost:5000";
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
     const handleSubmit = async (e) => {
         e.preventDefault();

@@ -9,8 +9,7 @@ const UserDashboard = () => {
     const navigate = useNavigate();
     
     const userId = localStorage.getItem('user_id'); 
-    const BACKEND_URL = "http://localhost:5000";
-
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
     const fetchMyHistory = async () => {
         try {
             const res = await axios.get(`${BACKEND_URL}/reports?user_id=${userId}`);

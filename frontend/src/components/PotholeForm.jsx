@@ -30,7 +30,7 @@ const PotholeForm = () => {
     const navigate = useNavigate();
     const userId = localStorage.getItem('user_id');
     const userName = localStorage.getItem('name') || "ABIZER SAIFEE";
-    const BACKEND_URL = "http://localhost:5000";
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
     const updateAddress = async (lat, lng) => {
         try {
