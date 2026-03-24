@@ -22,7 +22,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # CORS configuration for production
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://your-frontend-url.vercel.app"]}}, 
+CORS(app, resources={r"/*": {"origins": ["https://pothole-detection-website.onrender.com", "https://pothole-detection-website.vercel.app"]}}, 
      expose_headers=['x-access-token'], 
      allow_headers=['Content-Type', 'x-access-token'])
 
