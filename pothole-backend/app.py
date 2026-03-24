@@ -21,11 +21,33 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CORS configuration for production
-CORS(app, resources={r"/*": {"origins": ["https://pothole-detection-website.onrender.com", "https://pothole-detection-website.vercel.app"]}}, 
-     expose_headers=['x-access-token'], 
-     allow_headers=['Content-Type', 'x-access-token'])
+# Configure CORS properly
+CORS(app, 
+     origins=["https://pothole-detection-website.vercel.app", "https://pothole-detection-website.onrender.com"],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "x-access-token"],
+     expose_headers=["x-access-token"],
+     supports_credentials=True)
 
+# Handle OPTIONS requests for all routes
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        response.headers.add("Access-Control-Allow-Origin", "https://pothole-detection-website.vercel.app")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type, x-access-token")
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+        return response
+
+# Add a simple test route at root
+@app.route('/', methods=['GET', 'OPTIONS'])
+def home():
+    return jsonify({"message": "Pothole Detection API is Live 🚀", "status": "running"})
+
+# Health check endpoint
+@app.route('/health', methods=['GET', 'OPTIONS'])
+def health():
+    return jsonify({"status": "healthy", "api": "running"})
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "mumbai_university_it_2026")
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
