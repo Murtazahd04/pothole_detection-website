@@ -23,7 +23,7 @@ const RealTimeDetection = () => {
     
     const CONFIDENCE_THRESHOLD = 0.75; // 75% confidence threshold
     // Use environment variable for backend URL (for production)
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
     const userId = localStorage.getItem('user_id');
     const userName = localStorage.getItem('name') || "Citizen";
 

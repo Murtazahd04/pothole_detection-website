@@ -27,7 +27,7 @@ const AdminDashboard = () => {
     const [showResolveCenter, setShowResolveCenter] = useState(false);
     
     const userRole = localStorage.getItem('role') || 'default';
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
     const mapConfigs = {
         'admin-tmc': { center: [19.2183, 72.9781], zoom: 13, name: "Thane Municipal Corporation" },
         'admin-bmc': { center: [19.0760, 72.8777], zoom: 12, name: "Brihanmumbai Municipal Corp" },

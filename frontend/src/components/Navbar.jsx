@@ -11,7 +11,7 @@ const Navbar = () => {
     const role = localStorage.getItem('role');
     const userId = localStorage.getItem('user_id');
     const name = localStorage.getItem('name') || "User";
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
     useEffect(() => {
         // Only citizens (users) need notifications for resolved reports
