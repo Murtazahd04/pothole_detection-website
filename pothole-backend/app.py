@@ -21,20 +21,42 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Define allowed origins
+ALLOWED_ORIGINS = [
+    "https://pothole-detection-website.vercel.app",
+    "https://pothole-detection-website.onrender.com",
+    "http://localhost:5000",
+    "http://localhost:5173"
+]
+
 # Configure CORS properly
 CORS(app, 
-     origins=["https://pothole-detection-website.vercel.app", "https://pothole-detection-website.onrender.com"],
+     origins=ALLOWED_ORIGINS,
      methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-     allow_headers=["Content-Type", "x-access-token"],
+     allow_headers=["Content-Type", "x-access-token", "Authorization"],
      expose_headers=["x-access-token"],
      supports_credentials=True)
+
+# Handle OPTIONS requests for all routes
+@app.after_request
+def after_request(response):
+    # Get the origin from the request
+    origin = request.headers.get('Origin')
+    # If origin is allowed, add CORS headers
+    if origin in ALLOWED_ORIGINS:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, x-access-token, Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
 
 # Handle OPTIONS requests for all routes
 @app.before_request
 def handle_options():
     if request.method == "OPTIONS":
         response = app.make_default_options_response()
-        response.headers.add("Access-Control-Allow-Origin", "https://pothole-detection-website.vercel.app")
+        response.headers.add("Access-Control-Allow-Origin", "https://pothole-detection-website.vercel.app","http://localhost:5173")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type, x-access-token")
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
         return response
