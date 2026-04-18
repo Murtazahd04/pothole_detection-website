@@ -26,6 +26,7 @@ const PotholeForm = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [searchSuggestions, setSearchSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [detectionError, setDetectionError] = useState(null);
     
     const navigate = useNavigate();
     const userId = localStorage.getItem('user_id');
@@ -115,15 +116,44 @@ const PotholeForm = () => {
         setImage(file);
         setPreview(URL.createObjectURL(file));
         setIsProcessing(true);
+        setDetectionError(null);
 
         const tempFormData = new FormData();
         tempFormData.append('image', file);
+        
         try {
-            const res = await axios.post(`${BACKEND_URL}/predict`, tempFormData);
-            setPotholeCount(res.data.pothole_count); 
+            console.log("Sending image to /predict endpoint...");
+            const res = await axios.post(`${BACKEND_URL}/predict`, tempFormData, {
+                headers: { 
+                    'Content-Type': 'multipart/form-data'
+                },
+                timeout: 30000 // 30 second timeout
+            });
+            
+            console.log("Prediction response:", res.data);
+            
+            if (res.data && typeof res.data.pothole_count !== 'undefined') {
+                setPotholeCount(res.data.pothole_count);
+                if (res.data.pothole_count === 0) {
+                    setDetectionError("No potholes detected in this image. Try uploading a clearer photo of the road.");
+                }
+            } else {
+                setPotholeCount(0);
+                setDetectionError("Could not analyze image. Please try again.");
+            }
         } catch (err) {
-            console.error("AI inference error");
-            setPotholeCount(0); 
+            console.error("AI inference error:", err);
+            setPotholeCount(0);
+            
+            // Show detailed error message
+            if (err.response) {
+                console.error("Error response:", err.response.data);
+                setDetectionError(`Server error: ${err.response.data.error || "Please try again"}`);
+            } else if (err.request) {
+                setDetectionError("No response from server. Check if backend is running.");
+            } else {
+                setDetectionError(`Error: ${err.message}`);
+            }
         } finally {
             setIsProcessing(false);
         }
@@ -147,15 +177,17 @@ const PotholeForm = () => {
         try {
             setLoading(true);
             const res = await axios.post(`${BACKEND_URL}/report`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 30000
             });
             
             if (res.status === 201) {
-                alert("Report submitted! View progress in History. ✅");
+                alert(`Report submitted! ✅\n\nPotholes detected: ${res.data.count}\nMunicipality: ${res.data.municipality}\n\nThank you for helping fix our roads!`);
                 navigate('/history');
             }
         } catch (err) {
-            alert("Submission failed. Check backend connection.");
+            console.error("Submission error:", err);
+            alert("Submission failed. Please check your internet connection and try again.");
         } finally {
             setLoading(false);
         }
@@ -168,7 +200,10 @@ const PotholeForm = () => {
                     
                     {/* LEFT PANEL: IMAGE CAPTURE */}
                     <div className="md:w-1/2 p-10 border-r border-slate-100">
-                        <h2 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter mb-10">Report Pothole</h2>
+                        <div className="flex items-center gap-3 mb-6">
+                            <img src="/logo.png" alt="Logo" className="h-10 w-auto" />
+                            <h2 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter">Report Pothole</h2>
+                        </div>
                         
                         <div className="mb-8">
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Upload Evidence</label>
@@ -190,16 +225,31 @@ const PotholeForm = () => {
                             <div className={`p-5 rounded-2xl flex justify-between items-center shadow-xl transition-all duration-300 ${
                                 isProcessing 
                                     ? 'bg-slate-100 text-slate-400' 
-                                    : 'bg-blue-600 text-white'
+                                    : potholeCount > 0 
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-red-600 text-white'
                             }`}>
                                 <span className="text-[11px] font-black uppercase tracking-widest">
                                     {isProcessing ? "AI analyzing road..." : "YOLOv8 Vision Status:"}
                                 </span>
                                 {!isProcessing && (
-                                    <span className="bg-white text-blue-600 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-tighter">
-                                        {potholeCount} {potholeCount === 1 ? 'Pothole' : 'Potholes'} Detected
+                                    <span className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-tighter ${
+                                        potholeCount > 0 
+                                            ? 'bg-white text-green-600'
+                                            : 'bg-white text-red-600'
+                                    }`}>
+                                        {potholeCount > 0 
+                                            ? `${potholeCount} Pothole${potholeCount !== 1 ? 's' : ''} Detected` 
+                                            : 'No Potholes Detected'}
                                     </span>
                                 )}
+                            </div>
+                        )}
+                        
+                        {/* Error Message */}
+                        {detectionError && (
+                            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
+                                <p className="text-[10px] font-medium text-yellow-800">{detectionError}</p>
                             </div>
                         )}
                     </div>

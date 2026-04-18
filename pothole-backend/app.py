@@ -14,8 +14,6 @@ from functools import wraps
 import base64
 from io import BytesIO
 from PIL import Image
-import cv2
-import numpy as np
 
 load_dotenv()
 
@@ -26,7 +24,9 @@ ALLOWED_ORIGINS = [
     "https://pothole-detection-website.vercel.app",
     "https://pothole-detection-website.onrender.com",
     "http://localhost:5000",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "http://127.0.0.1:5000",
+    "http://127.0.0.1:5173"
 ]
 
 # Configure CORS properly
@@ -36,31 +36,6 @@ CORS(app,
      allow_headers=["Content-Type", "x-access-token", "Authorization"],
      expose_headers=["x-access-token"],
      supports_credentials=True)
-
-# Handle OPTIONS requests for all routes
-@app.after_request
-def after_request(response):
-    # Get the origin from the request
-    origin = request.headers.get('Origin')
-    # If origin is allowed, add CORS headers
-    if origin in ALLOWED_ORIGINS:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, x-access-token, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
-
-
-# Handle OPTIONS requests for all routes
-@app.before_request
-def handle_options():
-    if request.method == "OPTIONS":
-        response = app.make_default_options_response()
-        response.headers.add("Access-Control-Allow-Origin", "https://pothole-detection-website.vercel.app","http://localhost:5173")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, x-access-token")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-        return response
-
 
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "mumbai_university_it_2026")
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
@@ -91,6 +66,11 @@ MUNICIPALITY_BOUNDARIES = {
 }
 
 # --- DATABASE & MODEL INITIALIZATION ---
+model = None
+client = None
+reports_collection = None
+users_collection = None
+
 try:
     # Load model
     model_path = os.path.join(BASE_DIR, 'model', 'best.pt')
@@ -105,27 +85,29 @@ try:
     mongo_uri = os.getenv("MONGO_URI")
     if not mongo_uri:
         print("❌ MONGO_URI not found in environment variables")
-        raise Exception("MONGO_URI not configured")
-    
-    client = MongoClient(mongo_uri)
-    # Test connection
-    client.admin.command('ping')
-    print("✅ MongoDB Atlas Connected Successfully")
-    
-    db = client['pothole_db']
-    reports_collection = db['reports']
-    users_collection = db['users']
-    
-    # Create indexes for better performance
-    reports_collection.create_index([("coordinates", "2dsphere")])
-    reports_collection.create_index("user_id")
-    reports_collection.create_index("status")
-    users_collection.create_index("email", unique=True)
+    else:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        # Test connection
+        client.admin.command('ping')
+        print("✅ MongoDB Atlas Connected Successfully")
+        
+        db = client['pothole_db']
+        reports_collection = db['reports']
+        users_collection = db['users']
+        
+        # Create indexes for better performance
+        try:
+            reports_collection.create_index([("coordinates", "2dsphere")])
+            reports_collection.create_index("user_id")
+            reports_collection.create_index("status")
+            users_collection.create_index("email", unique=True)
+            print("✅ Database indexes created")
+        except Exception as e:
+            print(f"⚠️ Index creation warning: {e}")
     
 except Exception as e:
     print(f"❌ Initialization Error: {e}")
     model = None
-    client = None
 
 # --- HELPER FUNCTIONS ---
 def detect_municipality_by_coordinates(lat, lng):
@@ -147,9 +129,10 @@ def detect_municipality_by_address(address):
 
 def reverse_geocode(lat, lng):
     try:
-        location = geolocator.reverse(f"{lat}, {lng}")
-        return location.address if location else "Address not found"
-    except:
+        location = geolocator.reverse(f"{lat}, {lng}", timeout=10)
+        return location.address if location else f"Coordinates: {lat}, {lng}"
+    except Exception as e:
+        print(f"Geocoding error: {e}")
         return f"Coordinates: {lat}, {lng}"
 
 # --- AUTH DECORATOR ---
@@ -161,9 +144,13 @@ def token_required(f):
             return jsonify({'message': 'Token is missing!'}), 401
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            if users_collection is None:
+                return jsonify({'message': 'Database not available'}), 503
             current_user = users_collection.find_one({"_id": ObjectId(data['user_id'])})
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 401
         except Exception as e:
             return jsonify({'message': 'Token is invalid!', 'error': str(e)}), 401
         return f(current_user, *args, **kwargs)
@@ -176,8 +163,8 @@ def home():
 
 @app.route('/health')
 def health():
-    db_status = "connected" if client else "disconnected"
-    model_status = "loaded" if model else "not loaded"
+    db_status = "connected" if client is not None else "disconnected"
+    model_status = "loaded" if model is not None else "not loaded"
     return jsonify({
         "status": "healthy",
         "database": db_status,
@@ -187,24 +174,27 @@ def health():
 # Real-time detection endpoint
 @app.route('/detect-realtime', methods=['POST'])
 def detect_realtime():
-    if not model:
-        return jsonify({"error": "Model not loaded"}), 503
+    if model is None:
+        return jsonify({"error": "Model not loaded", "success": False}), 503
     
     try:
         data = request.get_json()
         
         if 'image' not in data:
-            return jsonify({"error": "No image data"}), 400
+            return jsonify({"error": "No image data", "success": False}), 400
         
+        # Decode base64 image
         image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
         image_bytes = base64.b64decode(image_data)
         image = Image.open(BytesIO(image_bytes))
         
+        # Save temporary file
         temp_filename = f"realtime_{datetime.now().timestamp()}.jpg"
         temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
         image.save(temp_path)
         
         try:
+            # Run prediction
             results = model.predict(source=temp_path, conf=0.4)
             pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
             
@@ -219,7 +209,9 @@ def detect_realtime():
                         'confidence': float(box.conf[0])
                     })
             
-            os.remove(temp_path)
+            # Clean up
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
             
             return jsonify({
                 "success": True,
@@ -231,10 +223,47 @@ def detect_realtime():
         except Exception as e:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": str(e), "success": False}), 500
             
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "success": False}), 500
+
+# Prediction endpoint for manual detection
+@app.route('/predict', methods=['POST'])
+def predict_only():
+    if model is None:
+        return jsonify({"error": "Model not loaded", "pothole_count": 0}), 503
+    
+    if 'image' not in request.files:
+        return jsonify({"error": "No image", "pothole_count": 0}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No file selected", "pothole_count": 0}), 400
+    
+    # Save temporary file
+    filename = secure_filename(file.filename)
+    temp_filename = f"temp_{datetime.now().timestamp()}_{filename}"
+    temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+    file.save(temp_path)
+    
+    try:
+        print(f"Predicting on image: {temp_path}")
+        results = model.predict(source=temp_path, conf=0.4)
+        count = len(results[0].boxes) if results and len(results) > 0 else 0
+        print(f"Detection result: {count} potholes found")
+        
+        # Clean up
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        return jsonify({"pothole_count": count}), 200
+        
+    except Exception as e:
+        print(f"Prediction error: {e}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({"error": str(e), "pothole_count": 0}), 500
 
 # Auto-report endpoint
 @app.route('/auto-report', methods=['POST'])
@@ -259,6 +288,7 @@ def auto_report():
         if municipality == "OTHER":
             municipality = detect_municipality_by_address(address)
         
+        # Decode and save image
         image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
         image_bytes = base64.b64decode(image_data)
         
@@ -283,18 +313,23 @@ def auto_report():
             "created_at": datetime.now()
         }
         
-        inserted = reports_collection.insert_one(report_data)
+        if reports_collection is not None:
+            inserted = reports_collection.insert_one(report_data)
+            report_id = str(inserted.inserted_id)
+        else:
+            report_id = None
         
         return jsonify({
             "success": True,
             "message": "Report submitted automatically!",
-            "report_id": str(inserted.inserted_id),
+            "report_id": report_id,
             "pothole_count": pothole_count,
             "municipality": municipality,
             "municipality_name": MUNICIPALITY_BOUNDARIES.get(municipality, {}).get("name", "Unknown")
         }), 201
         
     except Exception as e:
+        print(f"Auto-report error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Get municipality by coordinates
@@ -342,7 +377,7 @@ def report_pothole():
     file.save(img_path)
 
     try:
-        if model:
+        if model is not None:
             results = model.predict(source=img_path, conf=0.4)
             pothole_count = len(results[0].boxes) if results and len(results) > 0 else 0
         else:
@@ -367,15 +402,21 @@ def report_pothole():
             "created_at": datetime.now()
         }
 
-        inserted = reports_collection.insert_one(report_data)
+        if reports_collection is not None:
+            inserted = reports_collection.insert_one(report_data)
+            report_id = str(inserted.inserted_id)
+        else:
+            report_id = None
+            
         return jsonify({
             "message": "Report created", 
-            "id": str(inserted.inserted_id), 
+            "id": report_id, 
             "count": pothole_count,
             "municipality": municipality
         }), 201
 
     except Exception as e:
+        print(f"Report error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Fetch reports
@@ -395,16 +436,23 @@ def get_reports():
         query = {"user_id": user_id}
         
     try:
+        if reports_collection is None:
+            return jsonify([]), 200
+            
         reports = list(reports_collection.find(query).sort("created_at", -1))
         for report in reports:
             report['_id'] = str(report['_id'])
         return jsonify(reports), 200
     except Exception as e:
+        print(f"Fetch reports error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Auth routes
 @app.route('/signup', methods=['POST'])
 def signup():
+    if users_collection is None:
+        return jsonify({"message": "Database not available"}), 503
+        
     data = request.get_json()
     if users_collection.find_one({"email": data['email']}):
         return jsonify({"message": "User already exists"}), 400
@@ -422,6 +470,9 @@ def signup():
 
 @app.route('/login', methods=['POST'])
 def login():
+    if users_collection is None:
+        return jsonify({"message": "Database not available"}), 503
+        
     data = request.get_json()
     user = users_collection.find_one({"email": data['email']})
     
@@ -454,7 +505,7 @@ def update_status(report_id):
         res_path = os.path.join(UPLOAD_FOLDER, res_filename)
         file.save(res_path)
 
-        if model:
+        if model is not None:
             results = model.predict(source=res_path, conf=0.4)
             detected_potholes = len(results[0].boxes) if results and len(results) > 0 else 0
 
@@ -462,14 +513,15 @@ def update_status(report_id):
                 os.remove(res_path)
                 return jsonify({"error": f"Rejected: AI detected {detected_potholes} potholes still present."}), 400
 
-        reports_collection.update_one(
-            {"_id": ObjectId(report_id)},
-            {"$set": {
-                "status": "Resolved",
-                "resolved_image_url": f"uploads/{res_filename}",
-                "resolved_at": datetime.now()
-            }}
-        )
+        if reports_collection is not None:
+            reports_collection.update_one(
+                {"_id": ObjectId(report_id)},
+                {"$set": {
+                    "status": "Resolved",
+                    "resolved_image_url": f"uploads/{res_filename}",
+                    "resolved_at": datetime.now()
+                }}
+            )
         return jsonify({"message": "Road verified clear. Status updated! ✅"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -478,6 +530,9 @@ def update_status(report_id):
 @app.route('/reports/<report_id>', methods=['DELETE'])
 def delete_report(report_id):
     try:
+        if reports_collection is None:
+            return jsonify({"error": "Database not available"}), 503
+            
         result = reports_collection.delete_one({"_id": ObjectId(report_id)})
         if result.deleted_count == 0:
             return jsonify({"error": "Report not found"}), 404
@@ -490,6 +545,39 @@ def delete_report(report_id):
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
+# Password reset endpoint
+@app.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        answer = data.get('answer')
+        new_password = data.get('newPassword')
+        
+        if users_collection is None:
+            return jsonify({"message": "Database not available"}), 503
+        
+        # Find user by email
+        user = users_collection.find_one({"email": email})
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+        
+        # Simple security check - you can enhance this
+        if answer != "default_answer":
+            return jsonify({"message": "Security answer incorrect"}), 401
+        
+        # Update password
+        hashed_password = generate_password_hash(new_password)
+        users_collection.update_one(
+            {"_id": user['_id']},
+            {"$set": {"password": hashed_password}}
+        )
+        
+        return jsonify({"message": "Password reset successful"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)
